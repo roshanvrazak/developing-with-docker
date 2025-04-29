@@ -1,29 +1,61 @@
-version: '3'
+version: '3.8'
 services:
   my-test-app:
-    image: 192.168.0.76:8083/my-test-app:1.0
+    image: 192.168.0.76:8083/my-test-app:1.5
+    platform: linux/amd64
     ports:
-     - 3000:3000
-  mongodb:
-    image: mongo
-    ports:
-     - 27017:27017
-    environment:
-     - MONGO_INITDB_ROOT_USERNAME=admin
-     - MONGO_INITDB_ROOT_PASSWORD=password
-    volumes:
-     - mongo-data:/data/db
-  mongo-express:
-    image: mongo-express
-    restart: always
-    ports: 
-     - 8080:8081
-    environment:
-     - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
-     - ME_CONFIG_MONGODB_ADMINPASSWORD=password
-     - ME_CONFIG_MONGODB_SERVER=mongodb
+      - 3000:3000
+    networks:
+      - app-network
     depends_on:
-     - "mongodb"
+      mongodb:
+        condition: service_healthy
+    restart: on-failure
+
+  mongodb:
+    image: mongo:4.4
+    platform: linux/amd64
+    ports:
+      - 27017:27017
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - app-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongo mongodb://admin:password@localhost:27017/admin --quiet
+      interval: 20s
+      timeout: 15s
+      retries: 10
+      start_period: 60s
+
+  mongo-express:
+    image: mongo-express:1.0.0-alpha.4
+    platform: linux/amd64
+    restart: always
+    ports:
+      - 8081:8081
+    environment:
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=password
+      - ME_CONFIG_MONGODB_SERVER=mongodb
+      - ME_CONFIG_MONGODB_URL=mongodb://admin:password@mongodb:27017/?authSource=admin
+      - ME_CONFIG_OPTIONS_EDITORTHEME=ambiance
+      - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
 volumes:
   mongo-data:
     driver: local
